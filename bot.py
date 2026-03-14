@@ -1,493 +1,379 @@
-import random
-import sqlite3
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+import json
+from pyrogram import Client, filters
+from pyrogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 
-TOKEN = "8696029054:AAEniGmR-oX93f5RDGCWfMfcr2zh7tF6GNQ"
+API_ID = 30956542
+API_HASH = "b36f49d94e7bb1109e22d7ee405d41b6"
+BOT_TOKEN = "8457375768:AAGSQB3gnibvKgfvD5HB_e11Tbs5ybRf_TU"
+
 ADMIN_ID = 8626918981
+OTP_GROUP = "https://t.me/newottp24"
 
-otp_group_link = "https://t.me/yourgroup"
+app = Client("otpbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# ---------------- DATABASE ----------------
+# DATABASE
+try:
+    with open("data.json") as f:
+        data = json.load(f)
+except:
+    data = {"services": {}}
 
-db = sqlite3.connect("bot.db")
-cursor = db.cursor()
+users=set()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users(
-user_id INTEGER PRIMARY KEY,
-balance INTEGER DEFAULT 0
+def save():
+    with open("data.json","w") as f:
+        json.dump(data,f)
+
+admin_step = {}
+
+# USER MENU
+menu = ReplyKeyboardMarkup(
+[
+["📱 Get Number","📊 Status"],
+["👥 Friend Invite","💰 Withdraw"],
+["⭐ Premium User Only"],
+["☎ Support"]
+],
+resize_keyboard=True
 )
+
+# START
+@app.on_message(filters.command("start"))
+async def start(client,message):
+
+    users.add(message.from_user.id)
+
+    await message.reply(
+        "🤖 OTP BOT READY",
+        reply_markup=menu
+    )
+
+# STATUS
+@app.on_message(filters.command("status") | filters.regex("Status"))
+async def status(client,message):
+
+    services=len(data["services"])
+
+    numbers=0
+    for s in data["services"]:
+        for c in data["services"][s]:
+            numbers+=len(data["services"][s][c])
+
+    await message.reply(f"""
+📊 BOT STATUS
+
+Services : {services}
+Numbers : {numbers}
+
+Bot Status : Online ✅
 """)
 
-db.commit()
+# PREMIUM
+@app.on_message(filters.regex("Premium"))
+async def premium(client,message):
 
-# ---------------- SERVICES ----------------
+    await message.reply(
+        "⭐ Premium User Only\n\n"
+        "Premium নিতে যোগাযোগ করুন 👇\n"
+        "https://t.me/skboy12344"
+    )
 
-services = ["Facebook","Telegram","TikTok"]
+# INVITE
+@app.on_message(filters.regex("Invite"))
+async def invite(client,message):
 
-# ---------------- SERVICE COUNTRIES ----------------
+    bot=(await app.get_me()).username
+    link=f"https://t.me/{bot}?start={message.from_user.id}"
 
-service_countries = {
-"Facebook":{"🇧🇩 Bangladesh":"+880"},
-"Telegram":{"🇮🇹 Italy":"+39"},
-"TikTok":{
-"🇧🇩 Bangladesh":"+880",
-"🇦🇴 Angola":"+244"
-}
-}
+    await message.reply(f"""
+👥 Invite Friends
 
-# ---------------- REAL NUMBER GENERATOR ----------------
+Your Invite Link:
+{link}
+""")
 
-def generate_number(prefix):
+# SUPPORT
+@app.on_message(filters.regex("Support"))
+async def support(client,message):
 
-    if prefix == "+880":
-        operators=["17","18","19","16","15","13"]
-        op=random.choice(operators)
-        number="".join(str(random.randint(0,9)) for _ in range(8))
-        return f"+880{op}{number}"
+    await message.reply("☎ Support\nContact Admin")
 
-    elif prefix == "+39":
-        number="".join(str(random.randint(0,9)) for _ in range(9))
-        return f"+393{number}"
+# WITHDRAW
+@app.on_message(filters.regex("Withdraw"))
+async def withdraw(client,message):
 
-    elif prefix == "+244":
-        number="".join(str(random.randint(0,9)) for _ in range(8))
-        return f"+2449{number}"
+    await message.reply("💰 Withdraw System Coming Soon")
 
-    else:
-        number="".join(str(random.randint(0,9)) for _ in range(10))
-        return f"{prefix}{number}"
+# ADMIN PANEL
+@app.on_message(filters.command("admin"))
+async def admin(client,message):
 
-# ---------------- FORCE JOIN ----------------
+    if message.from_user.id != ADMIN_ID:
+        return await message.reply("❌ You are not admin")
 
-async def check_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    panel = ReplyKeyboardMarkup(
+    [
+    ["➕ Add Service","🌍 Add Country"],
+    ["📲 Add Number","📊 Bot Stats"],
+    ["📦 Total Numbers","👤 Total Users"],
+    ["❌ Delete Number"],
+    ["⬅ Back"]
+    ],
+    resize_keyboard=True
+    )
 
-    user=update.effective_user.id
+    await message.reply("👑 Admin Panel",reply_markup=panel)
 
-    if user==ADMIN_ID:
-        return True
+# BACK
+@app.on_message(filters.regex("Back"))
+async def back(client,message):
 
-    if not otp_group_link:
-        return True
+    await message.reply("🔙 Back To Menu",reply_markup=menu)
 
-    group=otp_group_link.split("/")[-1]
+# TOTAL USERS
+@app.on_message(filters.regex("Total Users") & filters.user(ADMIN_ID))
+async def total_users(client,message):
 
-    try:
-        member=await context.bot.get_chat_member(f"@{group}",user)
+    await message.reply(f"👤 Total Users : {len(users)}")
 
-        if member.status in ["member","administrator","creator"]:
-            return True
+# BOT STATS
+@app.on_message(filters.regex("Bot Stats") & filters.user(ADMIN_ID))
+async def botstats(client,message):
 
-        return False
+    services=len(data["services"])
 
-    except:
-        return False
+    numbers=0
+    for s in data["services"]:
+        for c in data["services"][s]:
+            numbers+=len(data["services"][s][c])
 
-# ---------------- USER MENU ----------------
+    await message.reply(f"""
+📊 ADMIN STATS
 
-user_keyboard=[
-["📱 Get Number","📊 Status"],
-["👥 Invite Friends","💰 Withdraw"],
-["☎ Support"]
-]
+Services : {services}
+Numbers : {numbers}
+""")
 
-user_menu=ReplyKeyboardMarkup(user_keyboard,resize_keyboard=True)
+# TOTAL NUMBERS
+@app.on_message(filters.regex("Total Numbers") & filters.user(ADMIN_ID))
+async def totalnumbers(client,message):
 
-# ---------------- ADMIN MENU ----------------
+    text="📦 NUMBERS\n\n"
 
-admin_keyboard=[
-["📊 Total Users","📢 Broadcast"],
-["🌍 Countries","➕ Add Country"],
-["❌ Delete Country","📱 User Menu"],
-["➕ Add Service","❌ Delete Service"],
-["🔗 Set OTP Group","❌ Delete OTP Group"]
-]
+    for s in data["services"]:
+        for c in data["services"][s]:
+            count=len(data["services"][s][c])
+            text+=f"{s} - {c} : {count}\n"
 
-admin_menu=ReplyKeyboardMarkup(admin_keyboard,resize_keyboard=True)
+    await message.reply(text)
 
-# ---------------- START ----------------
+# DELETE COUNTRY NUMBERS
+@app.on_message(filters.regex("Delete Number") & filters.user(ADMIN_ID))
+async def delete_number(client,message):
 
-async def start(update: Update,context: ContextTypes.DEFAULT_TYPE):
+    admin_step[message.from_user.id]="delete_country"
 
-    user=update.effective_user.id
+    await message.reply(
+        "Send format:\nservice country\n\nExample:\nwhatsapp pakistan"
+    )
 
-    joined=await check_join(update,context)
+# ADD SERVICE
+@app.on_message(filters.regex("Add Service") & filters.user(ADMIN_ID))
+async def add_service(client,message):
 
-    if not joined:
+    admin_step[message.from_user.id]="service"
+    await message.reply("Send Service Name\nExample:\nwhatsapp")
 
-        buttons=[
-        [InlineKeyboardButton("🔗 Join Group",url=otp_group_link)],
-        [InlineKeyboardButton("✅ Joined",callback_data="check_join")]
-        ]
+# ADD COUNTRY
+@app.on_message(filters.regex("Add Country") & filters.user(ADMIN_ID))
+async def add_country(client,message):
 
-        keyboard=InlineKeyboardMarkup(buttons)
+    admin_step[message.from_user.id]="country"
+    await message.reply("Send:\nservice country\nExample:\nwhatsapp pakistan")
 
-        await update.message.reply_text(
-        "⚠️ আগে OTP Group এ Join করুন",
-        reply_markup=keyboard)
+# ADD NUMBER
+@app.on_message(filters.regex("Add Number") & filters.user(ADMIN_ID))
+async def add_number(client,message):
 
-        return
+    admin_step[message.from_user.id]="number"
+    await message.reply("Send format:\nservice country\nnumbers")
 
-    cursor.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)",(user,))
-    db.commit()
+# ADMIN INPUT
+@app.on_message(filters.text & filters.user(ADMIN_ID))
+async def admin_input(client,message):
 
-    await update.message.reply_text(
-    "🤖 Premium Number Generator Bot",
-    reply_markup=user_menu)
+    step=admin_step.get(message.from_user.id)
 
-# ---------------- ADMIN ----------------
+    if step=="service":
 
-async def admin(update: Update,context: ContextTypes.DEFAULT_TYPE):
+        s=message.text.lower()
 
-    if update.effective_user.id!=ADMIN_ID:
-        return
+        if s not in data["services"]:
+            data["services"][s]={}
 
-    await update.message.reply_text(
-    "👑 Admin Dashboard",
-    reply_markup=admin_menu)
+        save()
+        admin_step.pop(message.from_user.id)
+        await message.reply("✅ Service Added")
 
-# ---------------- BUTTON HANDLER ----------------
+    elif step=="country":
 
-async def buttons(update: Update,context: ContextTypes.DEFAULT_TYPE):
+        s,c=message.text.lower().split()
 
-    global otp_group_link
+        if s not in data["services"]:
+            data["services"][s]={}
 
-    text=update.message.text
-    user=update.effective_user.id
+        if c not in data["services"][s]:
+            data["services"][s][c]=[]
 
-    joined=await check_join(update,context)
+        save()
+        admin_step.pop(message.from_user.id)
+        await message.reply("✅ Country Added")
 
-    if not joined:
+    elif step=="number":
 
-        buttons=[
-        [InlineKeyboardButton("🔗 Join Group",url=otp_group_link)],
-        [InlineKeyboardButton("✅ Joined",callback_data="check_join")]
-        ]
+        lines=message.text.split("\n")
 
-        keyboard=InlineKeyboardMarkup(buttons)
+        service,country=lines[0].split()
+        numbers=lines[1:]
 
-        await update.message.reply_text(
-        "⚠️ আগে OTP Group এ Join করুন",
-        reply_markup=keyboard)
+        if service not in data["services"]:
+            data["services"][service]={}
 
-        return
+        if country not in data["services"][service]:
+            data["services"][service][country]=[]
 
-# ---------- USER ----------
+        for n in numbers:
+            data["services"][service][country].append(n)
 
-    if text=="📱 Get Number":
+        save()
+        admin_step.pop(message.from_user.id)
 
-        buttons=[]
+        await message.reply(f"✅ {len(numbers)} Numbers Added")
 
-        for s in services:
-            buttons.append([InlineKeyboardButton(s,callback_data=f"service_{s}")])
+    elif step=="delete_country":
 
-        keyboard=InlineKeyboardMarkup(buttons)
+        service,country=message.text.lower().split()
 
-        await update.message.reply_text("📱 Select Service",reply_markup=keyboard)
+        if service in data["services"] and country in data["services"][service]:
 
-    elif text=="📊 Status":
+            count=len(data["services"][service][country])
 
-        cursor.execute("SELECT balance FROM users WHERE user_id=?",(user,))
-        bal=cursor.fetchone()[0]
+            data["services"][service][country]=[]
 
-        await update.message.reply_text(f"📊 Balance : {bal}")
+            save()
 
-    elif text=="👥 Invite Friends":
+            await message.reply(f"❌ {count} numbers deleted from {service} {country}")
 
-        link=f"https://t.me/{context.bot.username}?start={user}"
+        else:
+            await message.reply("❌ Service or country not found")
 
-        await update.message.reply_text(f"Invite Link:\n{link}")
+        admin_step.pop(message.from_user.id)
 
-    elif text=="💰 Withdraw":
+# GET NUMBER
+@app.on_message(filters.regex("Get Number"))
+async def get_number(client,message):
 
-        await update.message.reply_text("Send withdraw request to admin.")
+    buttons=[]
 
-    elif text=="☎ Support":
+    for s in data["services"]:
 
-        await update.message.reply_text("Contact Admin")
+        total=0
+        for c in data["services"][s]:
+            total+=len(data["services"][s][c])
 
-# ---------- ADMIN ----------
+        buttons.append(
+        [InlineKeyboardButton(f"{s.title()} ({total})",callback_data=f"service|{s}")]
+        )
 
-    elif text=="📊 Total Users" and user==ADMIN_ID:
+    if len(buttons)==0:
+        return await message.reply("❌ No Service Available")
 
-        cursor.execute("SELECT COUNT(*) FROM users")
-        total=cursor.fetchone()[0]
+    await message.reply(
+        "🔧 Please select a service:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
-        await update.message.reply_text(f"👥 Total Users : {total}")
+# SELECT SERVICE
+@app.on_callback_query(filters.regex("service"))
+async def service(client,call):
 
-    elif text=="📢 Broadcast" and user==ADMIN_ID:
+    service=call.data.split("|")[1]
 
-        context.user_data["broadcast"]=True
-        await update.message.reply_text("Send Broadcast Message")
+    buttons=[]
 
-    elif context.user_data.get("broadcast") and user==ADMIN_ID:
+    for c in data["services"][service]:
 
-        context.user_data["broadcast"]=False
+        count=len(data["services"][service][c])
 
-        cursor.execute("SELECT user_id FROM users")
-        users=cursor.fetchall()
+        buttons.append(
+        [InlineKeyboardButton(f"{c.title()} ({count})",callback_data=f"country|{service}|{c}")]
+        )
 
-        for u in users:
-            try:
-                await context.bot.send_message(u[0],text)
-            except:
-                pass
+    await call.message.edit(
+        "🌍 Select Country",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
-        await update.message.reply_text("Broadcast Sent")
+# SELECT COUNTRY
+@app.on_callback_query(filters.regex("country"))
+async def country(client,call):
 
-# ---------- COUNTRIES ----------
+    _,service,country=call.data.split("|")
 
-    elif text=="🌍 Countries" and user==ADMIN_ID:
+    numbers=data["services"][service][country]
 
-        msg=""
+    if len(numbers)==0:
+        return await call.answer("❌ No numbers",True)
 
-        for s in service_countries:
+    number=numbers.pop(0)
+    save()
 
-            msg+=f"\n{s}\n"
-
-            for c in service_countries[s]:
-                code=service_countries[s][c]
-                msg+=f"{c} {code}\n"
-
-        await update.message.reply_text(msg)
-
-# ---------- ADD COUNTRY ----------
-
-    elif text=="➕ Add Country" and user==ADMIN_ID:
-
-        context.user_data["add_country"]=True
-        await update.message.reply_text(
-        "Send:\nService Country Code\nExample:\nTelegram 🇧🇩 Bangladesh +880")
-
-    elif context.user_data.get("add_country") and user==ADMIN_ID:
-
-        try:
-
-            parts=text.split()
-
-            service=parts[0]
-            name=" ".join(parts[1:-1])
-            code=parts[-1]
-
-            if service not in service_countries:
-                service_countries[service]={}
-
-            service_countries[service][name]=code
-
-            context.user_data["add_country"]=False
-
-            await update.message.reply_text("Country Added")
-
-        except:
-            await update.message.reply_text("Format Error")
-
-# ---------- DELETE COUNTRY ----------
-
-    elif text=="❌ Delete Country" and user==ADMIN_ID:
-
-        buttons=[]
-
-        for service in service_countries:
-            buttons.append([InlineKeyboardButton(service,callback_data=f"delcountry_{service}")])
-
-        keyboard=InlineKeyboardMarkup(buttons)
-
-        await update.message.reply_text("Select Service",reply_markup=keyboard)
-
-# ---------- ADD SERVICE ----------
-
-    elif text=="➕ Add Service" and user==ADMIN_ID:
-
-        context.user_data["add_service"]=True
-        await update.message.reply_text("Send Service Name")
-
-    elif context.user_data.get("add_service") and user==ADMIN_ID:
-
-        if text not in services:
-
-            services.append(text)
-            service_countries[text]={}
-
-        context.user_data["add_service"]=False
-
-        await update.message.reply_text("Service Added")
-
-# ---------- DELETE SERVICE ----------
-
-    elif text=="❌ Delete Service" and user==ADMIN_ID:
-
-        buttons=[]
-
-        for s in services:
-            buttons.append([InlineKeyboardButton(s,callback_data=f"delservice_{s}")])
-
-        keyboard=InlineKeyboardMarkup(buttons)
-
-        await update.message.reply_text("Select Service",reply_markup=keyboard)
-
-# ---------- SET OTP GROUP ----------
-
-    elif text=="🔗 Set OTP Group" and user==ADMIN_ID:
-
-        context.user_data["set_group"]=True
-        await update.message.reply_text("Send OTP Group Link")
-
-    elif context.user_data.get("set_group") and user==ADMIN_ID:
-
-        otp_group_link=text
-        context.user_data["set_group"]=False
-
-        await update.message.reply_text("OTP Group Updated")
-
-# ---------- DELETE OTP GROUP ----------
-
-    elif text=="❌ Delete OTP Group" and user==ADMIN_ID:
-
-        otp_group_link=""
-        await update.message.reply_text("OTP Group Deleted")
-
-# ---------- USER MENU ----------
-
-    elif text=="📱 User Menu" and user==ADMIN_ID:
-
-        await update.message.reply_text("User Menu",reply_markup=user_menu)
-
-# ---------------- CALLBACK ----------------
-
-async def callback(update: Update,context: ContextTypes.DEFAULT_TYPE):
-
-    query=update.callback_query
-    data=query.data
-    await query.answer()
-
-# ---------- SERVICE ----------
-
-    if data.startswith("service_"):
-
-        service=data.replace("service_","")
-
-        context.user_data["service"]=service
-
-        buttons=[]
-
-        for c in service_countries.get(service,{}):
-            buttons.append([InlineKeyboardButton(c,callback_data=f"country_{c}")])
-
-        keyboard=InlineKeyboardMarkup(buttons)
-
-        await query.message.edit_text("🌍 Select Country",reply_markup=keyboard)
-
-# ---------- COUNTRY ----------
-
-    elif data.startswith("country_"):
-
-        await query.message.delete()
-
-        country=data.replace("country_","")
-
-        service=context.user_data.get("service")
-
-        prefix=service_countries[service][country]
-
-        number=generate_number(prefix)
-
-        msg=f"""
-🔄 New Number Generated
+    text=f"""
+✅ New Number
 
 Service : {service}
 Number : {number}
 
 Country : {country}
-OTP Status : Waiting for OTP
+OTP Status : Waiting
 """
 
-        buttons=[
-        [InlineKeyboardButton("🔄 Change Number",callback_data=f"change_{country}")],
-        [InlineKeyboardButton("👁 View OTP Group",url=otp_group_link)]
-        ]
+    buttons=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Change Number",callback_data=f"change|{service}|{country}")],
+        [InlineKeyboardButton("👁 View OTP Group",url=OTP_GROUP)]
+    ])
 
-        keyboard=InlineKeyboardMarkup(buttons)
+    await call.message.edit(text,reply_markup=buttons)
 
-        await query.message.reply_text(msg,reply_markup=keyboard)
+# CHANGE NUMBER
+@app.on_callback_query(filters.regex("change"))
+async def change(client,call):
 
-# ---------- CHANGE NUMBER ----------
+    _,service,country=call.data.split("|")
 
-    elif data.startswith("change_"):
+    numbers=data["services"][service][country]
 
-        country=data.replace("change_","")
+    if len(numbers)==0:
+        return await call.answer("❌ No numbers left",True)
 
-        service=context.user_data.get("service")
+    number=numbers.pop(0)
+    save()
 
-        prefix=service_countries[service][country]
-
-        number=generate_number(prefix)
-
-        msg=f"""
-🔄 New Number Generated
+    text=f"""
+✅ New Number
 
 Service : {service}
 Number : {number}
 
 Country : {country}
-OTP Status : Waiting for OTP
+OTP Status : Waiting
 """
 
-        buttons=[
-        [InlineKeyboardButton("🔄 Change Number",callback_data=f"change_{country}")],
-        [InlineKeyboardButton("👁 View OTP Group",url=otp_group_link)]
-        ]
+    buttons=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Change Number",callback_data=f"change|{service}|{country}")],
+        [InlineKeyboardButton("👁 View OTP Group",url=OTP_GROUP)]
+    ])
 
-        keyboard=InlineKeyboardMarkup(buttons)
+    await call.message.edit(text,reply_markup=buttons)
 
-        await query.message.edit_text(msg,reply_markup=keyboard)
-
-# ---------- DELETE SERVICE CALLBACK ----------
-
-    elif data.startswith("delservice_"):
-
-        service=data.replace("delservice_","")
-
-        if service in services:
-
-            services.remove(service)
-            del service_countries[service]
-
-        await query.message.edit_text(f"{service} Deleted")
-
-# ---------- DELETE COUNTRY CALLBACK ----------
-
-    elif data.startswith("delcountry_"):
-
-        service=data.replace("delcountry_","")
-
-        buttons=[]
-
-        for c in service_countries.get(service,{}):
-            buttons.append([InlineKeyboardButton(c,callback_data=f"delc_{service}_{c}")])
-
-        keyboard=InlineKeyboardMarkup(buttons)
-
-        await query.message.edit_text("Select Country To Delete",reply_markup=keyboard)
-
-    elif data.startswith("delc_"):
-
-        _,service,country=data.split("_",2)
-
-        if country in service_countries.get(service,{}):
-            del service_countries[service][country]
-
-        await query.message.edit_text(f"{country} Deleted")
-
-# ---------------- RUN BOT ----------------
-
-app=ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start",start))
-app.add_handler(CommandHandler("admin",admin))
-
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,buttons))
-app.add_handler(CallbackQueryHandler(callback))
-
-print("Bot Running...")
-app.run_polling()
+app.run()
